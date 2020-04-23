@@ -1,3 +1,4 @@
+# To-do: Please create some sort of 'default expected dictionary' (not defaultdict) for the results.
 # WalmartClearanceFinder
 Tool to find unmarked clearance items at Walmart stores across the US.
 
