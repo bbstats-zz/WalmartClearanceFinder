@@ -1,7 +1,7 @@
 # encoding=utf8
 import sys
-reload(sys)
-sys.setdefaultencoding('utf8')
+#reload(sys)
+#sys.setdefaultencoding('utf8')
 import argparse
 import helper
 import threading
@@ -19,7 +19,8 @@ ALL_SKUS = "data/MasterList.txt"
 # Default thread count
 SEARCH_VALS = []
 ALL_ITEMS = []
-CSV_HEADERS = ["skuVal", "title", "price", "quantity", "store", "availability", "primaryProductId", "category", "longSku", "rollback", "productType", "storeName", "storeAddress", "storeCity", "strikethrough", "upc", "usItemId", "storePostalCode", "storeStateOrProvinceCode", "reducedPrice", "clearance", "wupc"]
+#Original before Eric added inStorePrice and urgenQuantity below CSV_HEADERS = ["skuVal", "title", "price", "quantity", "store", "availability", "primaryProductId", "category", "longSku", "rollback", "productType", "storeName", "storeAddress", "storeCity", "strikethrough", "upc", "usItemId", "storePostalCode", "storeStateOrProvinceCode", "reducedPrice", "clearance", "wupc"]
+CSV_HEADERS = ["skuVal", "title", "price", "inStorePrice", "quantity", "urgentQuantity", "store", "availability", "primaryProductId", "category", "longSku", "rollback", "productType", "storeName", "storeAddress", "storeCity", "strikethrough", "upc", "usItemId", "storePostalCode", "storeStateOrProvinceCode", "reducedPrice", "clearance", "wupc"]
 COMPLETED = []
 STATIC_VALS = []
 
@@ -29,7 +30,7 @@ def get_current_time():
 CSV_FILE = "{}.csv".format(get_current_time())
 
 def update_csv(fileName):
-	with open(fileName, "wb") as f:
+	with open(fileName, "w") as f:
 		toWrite = [CSV_HEADERS] + ALL_ITEMS
 		writer = csv.writer(f)
 		writer.writerows(toWrite)
@@ -51,7 +52,7 @@ def search():
 				else:
 					val['skuVal'] = skuNumber
 					if helper.VERBOSE > 1:
-						print "{} | {} | {} | {} | {}/{}\n".format(val['title'][:40], val['price'], skuNumber, len(ALL_ITEMS), len(COMPLETED), STATIC_VALS[0]),
+						print ("{} | {} | {} | {} | {}/{}\n".format(val['title'][:40], val['price'], skuNumber, len(ALL_ITEMS), len(COMPLETED), STATIC_VALS[0]),)
 					tVal = []
 					for key in CSV_HEADERS:
 						tVal.append(val[key])
@@ -96,10 +97,14 @@ if __name__ == '__main__':
 		# This means the user did not specify a store number
 		storeVals = helper.GrabAllStoreNumbers()
 		# Creates a list of every store
-	else:
+	elif '.' not in args['store']:
 		# The user specified a single store
 		storeVals = [args['store']]
 		# Creates a list with a single item
+	else:
+		# This means it's a file input
+		storeVals = [x for x in open(args['store']).read().split("\n") if len(x) > 0]
+		# Creates a list from the file input
 	totalVals = 0
 	for store in storeVals:
 		# Iterates through all inputted stores

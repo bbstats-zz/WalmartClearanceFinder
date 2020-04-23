@@ -2,6 +2,9 @@ import requests
 import json
 import time
 import csv
+import logging
+from functools import wraps
+
 VERBOSE = 0
 REQUEST_TIMEOUT = 10
 NETWORK_RETRY = 3
@@ -15,10 +18,27 @@ WALMART_SEARCH_URL = "https://www.walmart.com/search/api/preso?prg=mWeb&cat_id=0
 PRESCO_BASE = "https://www.walmart.com/search/api/preso?"
 # This is the url that allows you to search on walmart.com
 
+def log_ex(func):
+    @wraps(func)
+    def _wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception:
+            logging.exception('...')
+    return _wrapper
+
+
+
+class BlankDict(dict):
+	def __missing__(self, key):
+		return ''
+
+
 class Hasher(dict):
-    def __missing__(self, key):
-        value = self[key] = type(self)()
-        return value
+	def __missing__(self, key):
+		self[key] = type(self)()
+		print(f"self key = {self[key]}")
+		return ''#return self[key]
 
 def gen_terrafirm_headers(sku):
 	# Headers for terrafirm request
@@ -102,29 +122,46 @@ def gen_search_urls(query, store=None):
 		urlVals += gen_all_pages(url, total_results)
 	return urlVals
 
-
 def returnPricing(terrafirmaDoc):
 	# Extracts pricing information from the terrafirm API response
-	terrafirmaDoc = Hasher(terrafirmaDoc)
+	#print("trying returnPricing")
+	#terrafirmaDoc = Hasher(terrafirmaDoc)
 	for key, value in terrafirmaDoc['payload']['offers'].items():
 		try:
-			price = terrafirmaDoc['payload']['offers'][key]['pricesInfo']['priceMap']['CURRENT']['price']
-			store = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storeId']
-			quantity = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]["inStoreStockStatus"]
-			rollback = terrafirmaDoc['payload']['offers'][key]['pricesInfo']['priceDisplayCodes']['rollback']
-			strikethrough = terrafirmaDoc['payload']['offers'][key]['pricesInfo']['priceDisplayCodes']['strikethrough']
-			reducedPrice = terrafirmaDoc['payload']['offers'][key]['pricesInfo']['priceDisplayCodes']['reducedPrice']
-			clearance = terrafirmaDoc['payload']['offers'][key]['pricesInfo']['priceDisplayCodes']['clearance']
-			storeCity = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storeCity']
-			storeName = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storeName']
-			storeAddress = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storeAddress']
-			storeStateOrProvinceCode = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storeStateOrProvinceCode']
-			storePostalCode = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['storePostalCode']
-			availability = terrafirmaDoc['payload']['offers'][key]['fulfillment']['pickupOptions'][0]['availability']
+			main_data = terrafirmaDoc['payload']['offers'][key]
+			try:
+				first_pickup_option=main_data['fulfillment']['pickupOptions'][0]
+			except:
+				first_pickup_option={'inStorePackagePrice': {'price': None},'storeId': None, 'inStoreStockStatus':None, 'urgentQuantity':None, 'storeCity':None, 'storeName': None, 'storeAddress': None, 'storeStateOrProvinceCode': None, 'priceDisplayCodes': None, 'storePostalCode': None}
+
+			price = main_data['pricesInfo']['priceMap']['CURRENT']['price']
+
+			inStorePrice = first_pickup_option['inStorePackagePrice']['price']
+			store = first_pickup_option['storeId']
+			quantity = first_pickup_option["inStoreStockStatus"]
+			urgentQuantity = first_pickup_option['urgentQuantity']
+
+			rollback = main_data['pricesInfo']['priceDisplayCodes']['rollback']
+			strikethrough = main_data['pricesInfo']['priceDisplayCodes']['strikethrough']
+			reducedPrice = main_data['pricesInfo']['priceDisplayCodes']['reducedPrice']
+			clearance = main_data['pricesInfo']['priceDisplayCodes']['clearance']
+
+			storeCity = first_pickup_option['storeCity']
+			storeName = first_pickup_option['storeName']
+			storeAddress = first_pickup_option['storeAddress']
+			storeStateOrProvinceCode = first_pickup_option['storeStateOrProvinceCode']
+			storePostalCode = first_pickup_option['storePostalCode']
+			try:
+				availability = first_pickup_option['availability']
+			except:
+				availability = None
+
 			productInfo = terrafirmaDoc['payload']['products']
-			productInfo = productInfo[productInfo.keys()[0]]
+			productInfo = productInfo[list(productInfo.keys())[0]]
 			productInfo = Hasher(productInfo)
+
 			primaryProductId = productInfo['primaryProductId']
+
 			wupc = productInfo['wupc']
 			usItemId = productInfo['usItemId']
 			upc = productInfo['upc']
@@ -132,14 +169,15 @@ def returnPricing(terrafirmaDoc):
 			longSku = productInfo['productAttributes']['sku']
 			titleVal = productInfo['productAttributes']['productName']
 			category = productInfo['productAttributes']['productCategory']['categoryPath']
-			information = {"title": titleVal, "price": price, "rollback": rollback, "strikethrough": strikethrough, "reducedPrice": reducedPrice, "clearance": clearance, "store": store, "storeCity": storeCity, "storeName": storeName, "storeAddress": storeAddress, "storeStateOrProvinceCode": storeStateOrProvinceCode, "storePostalCode": storePostalCode, "availability": availability, "quantity": quantity, "primaryProductId": primaryProductId, "wupc": wupc, "usItemId": usItemId, "upc": upc, "productType": productType, "longSku": longSku, "category": category}
+			information = {"title": titleVal, "price": price, "rollback": rollback, "strikethrough": strikethrough, "reducedPrice": reducedPrice, "clearance": clearance, "store": store, "storeCity": storeCity, "storeName": storeName, "storeAddress": storeAddress, "storeStateOrProvinceCode": storeStateOrProvinceCode, "storePostalCode": storePostalCode, "availability": availability, "quantity": quantity, "primaryProductId": primaryProductId, "wupc": wupc, "usItemId": usItemId, "upc": upc, "productType": productType, "longSku": longSku, "category": category, "urgentQuantity": urgentQuantity, "inStorePrice": inStorePrice}
 			for key, val in information.items():
 				if "Hasher" in str(type(information[key])):
 					information[key] = ""
+			print('we made it fam')
 			return information
 		except Exception as exp:
 			if VERBOSE > 5:
-				print exp
+				print(repr(exp))
 
 def local_item_info(store, sku):
 	# Returns all store-specific information for a SKU
@@ -152,7 +190,7 @@ def local_item_info(store, sku):
 	# This calls the API endpoint
 	if VERBOSE > 3:
 		# This will print the api response for debugging
-		print response.json()
+		print(response.json())
 	return returnPricing(response.json())
 
 def convertSKUToUPC(sku):
@@ -181,4 +219,4 @@ def GrabAllStoreNumbers():
 
 if __name__ == '__main__':
 	VERBOSE = 3
-	print local_item_info('2265', 'adsfadsf435188866')
+	print(local_item_info('2265', 'adsfadsf435188866'))
